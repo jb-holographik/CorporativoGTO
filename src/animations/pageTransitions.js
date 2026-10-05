@@ -165,7 +165,51 @@ function initBarbaRouter() {
     transitions: [createMobileMenuTransition(), createFadeTransition()],
   })
 
+  attachNavigationClickGuard()
   transitionsReady = true
+}
+
+// Entre le clic et le démarrage effectif de la transition, Barba a déjà poussé
+// la nouvelle URL mais n'est pas encore "running" : un second clic (double-clic,
+// autre lien) passe alors à travers `preventRunning` et déclenche soit une
+// transition concurrente, soit un rechargement natif ("même URL").
+// On bloque donc tout clic de lien tant qu'une navigation Barba est en cours.
+function attachNavigationClickGuard() {
+  let navigationInFlight = false
+  let hrefBeforeClick = null
+
+  // Capture : passe avant le listener de Barba
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (!event.target?.closest?.('a[href]')) return
+      if (navigationInFlight) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        return
+      }
+      hrefBeforeClick = currentPageUrl()
+    },
+    true
+  )
+
+  // Bubble, enregistré après barba.init : si Barba a pris le clic en charge,
+  // il a déjà fait son pushState de façon synchrone
+  document.addEventListener('click', () => {
+    if (hrefBeforeClick && currentPageUrl() !== hrefBeforeClick) {
+      navigationInFlight = true
+    }
+    hrefBeforeClick = null
+  })
+
+  barba.hooks.after(() => {
+    navigationInFlight = false
+  })
+}
+
+// URL sans le hash : un lien d'ancre ne déclenche pas de transition Barba
+function currentPageUrl() {
+  return window.location.href.split('#')[0]
 }
 
 function hasBarbaMarkup() {
@@ -185,8 +229,9 @@ function registerBarbaHooks() {
     disableScrollTriggersKeepState()
   })
 
-  barba.hooks.afterLeave(() => {
+  barba.hooks.afterLeave(({ next }) => {
     killScrollTriggers()
+    removePrefetchLinks(next?.container)
   })
 
   barba.hooks.beforeEnter(({ next }) => {
@@ -204,6 +249,17 @@ function registerBarbaHooks() {
       setNavScrollLock(false)
     }
   })
+}
+
+// Webflow ajoute des <link rel="prefetch"> à côté des liens. Réinsérés à chaque
+// transition, ils relancent des requêtes inutiles (Barba précharge déjà au
+// survol) qui sont ensuite annulées quand le container est retiré
+// (net::ERR_ABORTED). On les retire du container avant son insertion.
+function removePrefetchLinks(container) {
+  if (!container) return
+  container
+    .querySelectorAll('link[rel="prefetch"]')
+    .forEach((link) => link.remove())
 }
 
 function killScrollTriggers() {
@@ -283,7 +339,10 @@ function createMobileMenuTransition() {
   return {
     name: 'mobile-menu-behind',
     custom: ({ trigger }) => shouldUseMobileMenuTransition(trigger),
-    sync: true,
+    // Pas de `sync: true` : sinon Barba attend la requête de la page suivante
+    // avant de marquer la transition comme "running", et un second clic (ou un
+    // double-clic) pendant ce délai lance une transition concurrente qui casse
+    // le DOM et force un rechargement complet.
     leave({ current }) {
       if (current?.container) {
         gsap.set(current.container, { display: 'none' })
