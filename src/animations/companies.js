@@ -448,6 +448,55 @@ export function initCompanies() {
       }
     }
 
+    // Accès clavier : le titre sert de bouton pour ouvrir/fermer la carte, les
+    // vignettes deviennent des boutons focalisables seulement carte ouverte
+    const toggle = item.querySelector('.item_title')
+    const syncKeyboardState = () => {
+      if (toggle) toggle.setAttribute('aria-expanded', String(expanded))
+      localThumbs.forEach((thumb) => {
+        thumb.setAttribute('tabindex', expanded ? '0' : '-1')
+        thumb.setAttribute(
+          'aria-pressed',
+          String(thumb.classList.contains('is-active'))
+        )
+      })
+    }
+    if (toggle) {
+      toggle.setAttribute('role', 'button')
+      toggle.setAttribute('tabindex', '0')
+      if (description) {
+        if (!description.id) {
+          description.id = `company-description-${Array.from(items).indexOf(
+            item
+          )}`
+        }
+        toggle.setAttribute('aria-controls', description.id)
+      }
+      toggle.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        toggle.click()
+      })
+    }
+    localThumbs.forEach((thumb, index) => {
+      thumb.setAttribute('role', 'button')
+      thumb.setAttribute(
+        'aria-label',
+        `Show image ${index + 1} of ${localThumbs.length}`
+      )
+      thumb.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        thumb.click()
+      })
+      thumb.addEventListener('click', () => {
+        localThumbs.forEach((t) =>
+          t.setAttribute('aria-pressed', String(t === thumb))
+        )
+      })
+    })
+    syncKeyboardState()
+
     item.addEventListener('click', (event) => {
       if (isAnimating) return
       isAnimating = true
@@ -489,6 +538,7 @@ export function initCompanies() {
         onComplete: () => {
           isAnimating = false
           expanded = !expanded
+          syncKeyboardState()
           if (!isExpanding) {
             activeImageIndex = 0
             if (prefersFineHover && item.matches(':hover')) {

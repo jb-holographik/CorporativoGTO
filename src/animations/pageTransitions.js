@@ -2,12 +2,20 @@ import barba from '@barba/core'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
+import {
+  initDecorativeMedia,
+  initExternalLinks,
+} from '../utils/accessibility.js'
 import { listEasing } from '../utils/animationUtils.js'
 import { initScrollChapters } from '../utils/scrollCounter.js'
-import { initAboutHeadingTest } from './aboutHeadingTest.js'
 import { initAboutUs } from './aboutus.js'
 import { initCareers } from './careers.js'
 import { initCompanies } from './companies.js'
+import {
+  initHeadingReveals,
+  prepareHeadingReveals,
+  revealHeading,
+} from './headingReveal.js'
 import { initHero } from './hero.js'
 import { initHomeAbout } from './homeAbout.js'
 import { initLenis, getLenis } from './lenis.js'
@@ -32,13 +40,15 @@ const animationModules = [
   initNavScrollHide,
   initHero,
   initHomeAbout,
-  initAboutHeadingTest,
   initStickyParagraph,
   initScrollChapters,
   initCareers,
   initAboutUs,
   initCompanies,
   initSocialImpact,
+  initExternalLinks,
+  initDecorativeMedia,
+  initHeadingReveals,
 ]
 
 const hasBrowserEnv =
@@ -245,6 +255,7 @@ function registerBarbaHooks() {
       return
     }
     hydratePage({ reason: 'barba', next: data?.next })
+    focusPageHeading(data?.next?.container)
     if (!shouldUseMobileMenuTransition(data?.trigger)) {
       setNavScrollLock(false)
     }
@@ -260,6 +271,19 @@ function removePrefetchLinks(container) {
   container
     .querySelectorAll('link[rel="prefetch"]')
     .forEach((link) => link.remove())
+}
+
+// Après une transition, le focus resterait sur le lien cliqué (déjà retiré du
+// DOM) : on le place sur le titre de la nouvelle page pour que les lecteurs
+// d'écran annoncent le changement et que la tabulation reparte du haut.
+function focusPageHeading(container) {
+  if (!container) return
+  const heading = container.querySelector('h1') || container
+  if (!heading.hasAttribute('tabindex')) {
+    heading.setAttribute('tabindex', '-1')
+    heading.dataset.focusTarget = 'true'
+  }
+  heading.focus({ preventScroll: true })
 }
 
 function killScrollTriggers() {
@@ -431,6 +455,11 @@ function createFadeTransition() {
         gsap.set(eyebrows, { yPercent: 400 })
       }
 
+      // Cacher les titres avant la révélation ; celui du hero glisse avec les
+      // eyebrows, les autres au scroll (initHeadingReveals)
+      prepareHeadingReveals(nextContainer)
+      const heroHeading = pageContent.querySelector('.section_hero h1')
+
       const placeholder = document.createElement('div')
       pageContent.parentNode.insertBefore(placeholder, pageContent)
 
@@ -493,6 +522,9 @@ function createFadeTransition() {
         ease: listEasing,
         onStart: () => gsap.set(pageContent, { opacity: 1 }),
       })
+
+      // Pas attendu : la transition ne doit pas durer plus longtemps
+      if (heroHeading) revealHeading(heroHeading)
 
       if (heroClone) {
         const heroRectNow = heroImg?.getBoundingClientRect()

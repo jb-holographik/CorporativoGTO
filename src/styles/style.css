@@ -644,29 +644,6 @@ html.lenis body {
   pointer-events: none;
 }
 
-.section_about-test .about_headings,
-.section_about-test-2 .about_headings {
-  overflow: visible;
-}
-
-.section_about-test .about_heading-wrap,
-.section_about-test-2 .about_heading-wrap {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.section_about-test .about_headings,
-.section_about-test-2 .about_headings {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
 /* Appliqué aux mêmes paliers que le layout mobile/tablette (<=991px) */
 @media screen and (max-width: 991px) {
 
@@ -1198,4 +1175,46 @@ html.lenis body {
   .section_commitment .comitment-card.is-5 {
     width: 22.25em;
   }
+}
+
+/* Accessibilité */
+
+/* Titre focalisé par le script après une transition : pas d'anneau visible */
+[data-focus-target]:focus {
+  outline: none;
+}
+
+/* Zones tactiles d'au moins 44px de haut, sans changer la mise en page */
+#menu-button,
+#menu-close,
+.social-link,
+.footer_social-link {
+  position: relative;
+}
+
+#menu-button::before,
+#menu-close::before,
+.social-link::before,
+.footer_social-link::before {
+  content: '';
+  position: absolute;
+  inset: -11px -6px;
+}
+
+/* Libellés du footer lisibles sur mobile (0.5em ≈ 7.7px sinon) */
+@media screen and (max-width: 991px) {
+  .footer .eyebrow-s {
+    font-size: max(0.5em, 11px);
+  }
+}
+
+/* Cartes "Our companies" : focus clavier visible sur le titre et les vignettes */
+.companies_item .item_title:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+
+.companies_item .item-image-sm:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
 }

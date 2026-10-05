@@ -12,6 +12,10 @@ let lockedItemRef = null
 let navInitialized = false
 let menuTimelineRef = null
 let menuElementRef = null
+let menuOpenTriggerRef = null
+let menuCloseTriggerRef = null
+let menuOpen = false
+let restoreFocusOnMenuHide = false
 let wasTabletAndBelow = null
 let navScrollHideInitialized = false
 let navHidden = false
@@ -192,6 +196,56 @@ export function isTabletAndBelow() {
 
 function hideMenuElement() {
   if (menuElementRef) gsap.set(menuElementRef, { display: 'none' })
+  if (!restoreFocusOnMenuHide) return
+  restoreFocusOnMenuHide = false
+  // Rendre le focus au bouton Menu seulement s'il était resté dans le menu
+  // (après une transition Barba, il est déjà sur le titre de la nouvelle page)
+  const active = document.activeElement
+  if (!active || active === document.body || menuElementRef?.contains(active)) {
+    menuOpenTriggerRef?.focus({ preventScroll: true })
+  }
+}
+
+function setMenuOpenState(open) {
+  menuOpen = open
+  menuOpenTriggerRef?.setAttribute('aria-expanded', String(open))
+  if (open) restoreFocusOnMenuHide = true
+}
+
+function getMenuFocusables() {
+  if (!menuElementRef) return []
+  return Array.from(
+    menuElementRef.querySelectorAll('a[href], button:not([disabled])')
+  ).filter((el) => el.getClientRects().length > 0)
+}
+
+function handleMenuKeydown(event) {
+  if (!menuOpen || !menuTimelineRef) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    setMenuOpenState(false)
+    menuTimelineRef.reverse()
+    return
+  }
+
+  if (event.key !== 'Tab') return
+  // Garder le focus dans le menu tant qu'il est ouvert
+  const focusables = getMenuFocusables()
+  if (!focusables.length) return
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement
+  if (!menuElementRef.contains(active)) {
+    event.preventDefault()
+    first.focus()
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 export function isNavMenuOpen() {
@@ -217,6 +271,7 @@ export function closeNavMenu() {
       return
     }
 
+    setMenuOpenState(false)
     timeline.eventCallback('onReverseComplete', () => {
       hideMenuElement()
       timeline.eventCallback('onReverseComplete', hideMenuElement)
@@ -354,7 +409,13 @@ export function initNavMenuToggle() {
   if (menuTimelineRef) return
 
   menuElementRef = menuElement
+  menuOpenTriggerRef = openTrigger
+  menuCloseTriggerRef = closeTrigger
   gsap.set(menuElement, { width: '0%', display: 'none' })
+
+  if (!menuElement.id) menuElement.id = 'site-menu'
+  openTrigger.setAttribute('aria-controls', menuElement.id)
+  openTrigger.setAttribute('aria-expanded', 'false')
 
   const timeline = gsap.timeline({
     paused: true,
@@ -363,7 +424,10 @@ export function initNavMenuToggle() {
 
   timeline.to(menuElement, {
     width: '100%',
-    onStart: () => gsap.set(menuElement, { display: 'block' }),
+    onStart: () => {
+      gsap.set(menuElement, { display: 'block' })
+      menuCloseTriggerRef?.focus({ preventScroll: true })
+    },
   })
 
   timeline.eventCallback('onReverseComplete', hideMenuElement)
@@ -371,11 +435,13 @@ export function initNavMenuToggle() {
   const handleOpen = (event) => {
     event?.preventDefault()
     showNavbarImmediate()
+    setMenuOpenState(true)
     timeline.play()
   }
 
   const handleClose = (event) => {
     event?.preventDefault()
+    setMenuOpenState(false)
     timeline.reverse()
   }
 
@@ -386,11 +452,13 @@ export function initNavMenuToggle() {
     const currentPath = normalizeHrefPath(window.location.pathname || '/')
     if (!nextPath || nextPath === currentPath) {
       event.preventDefault()
+      setMenuOpenState(false)
       timeline.reverse()
     }
   }
 
   openTrigger.addEventListener('click', handleOpen)
+  document.addEventListener('keydown', handleMenuKeydown)
   closeTrigger.addEventListener('click', handleClose)
   mobileNavLinks.forEach((link) => {
     link.addEventListener('click', handleMobileLinkClick)

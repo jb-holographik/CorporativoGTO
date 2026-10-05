@@ -118,6 +118,11 @@ export function initScrollCounter(target) {
 
   const sticky = root
   const { rightSlider, centerSlider, leftSlider, container } = resolved
+
+  // Compteur purement visuel : sans ça, les lecteurs d'écran lisent toutes les
+  // colonnes de chiffres ("1012345678900123…%")
+  const counter = container.closest('.our-story_counter') || container
+  counter.setAttribute('aria-hidden', 'true')
   const leftParagraph = root.querySelector('.our-story_content_left .p-small')
   const rightParagraph = root.querySelector('.our-story_content_right .p-small')
   const scrollTriggerVars = getChapterScrollTriggerVars(root)

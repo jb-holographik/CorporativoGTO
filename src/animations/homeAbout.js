@@ -171,22 +171,12 @@ export function initHomeAbout() {
     hasMatchMedia &&
     window.matchMedia('(min-width: 768px) and (max-width: 991px)').matches
 
-  const sectionSelectors = [
-    '.section_about',
-    '.section_about-test',
-    '.section_about-test-2',
-  ]
-
-  const sections = sectionSelectors
-    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-    .filter(Boolean)
+  const sections = Array.from(document.querySelectorAll('.section_about'))
 
   if (!sections.length) return
 
   sections.forEach((section) => {
-    if (section.classList.contains('section_about')) {
-      whenHeroHasLoaded(() => preloadAboutSectionImages(section))
-    }
+    whenHeroHasLoaded(() => preloadAboutSectionImages(section))
     initHomeAboutSection({ section, isMobileLayout, isTabletLayout })
   })
 }
