@@ -369,4 +369,50 @@ export function initScrollCounter(target) {
   }
 
   initChapterTimeline()
+
+  // Les lignes sont figées en px au découpage. Si la largeur des colonnes
+  // change sans rechargement (fenêtre redimensionnée sous 768px) ou si la
+  // police arrive après le découpage, le texte repasse à la ligne à
+  // l'intérieur de chaque ligne et les caches n'en couvrent qu'une partie :
+  // on redécoupe et on reconstruit la timeline.
+  const columns = [leftParagraph, rightParagraph]
+    .map((paragraph) => paragraph?.parentElement)
+    .filter(Boolean)
+  const getColumnWidths = () =>
+    columns
+      .map((column) => Math.round(column.getBoundingClientRect().width))
+      .join(',')
+  let lastColumnWidths = getColumnWidths()
+  let resplitTimer = null
+  let resizeObserver = null
+
+  const resplit = () => {
+    if (!document.contains(root)) {
+      resizeObserver?.disconnect()
+      return
+    }
+    if (!chapterTween) return
+    buildChapterTimeline()
+    ScrollTrigger.refresh()
+    lastColumnWidths = getColumnWidths()
+  }
+
+  if (typeof ResizeObserver !== 'undefined' && columns.length) {
+    resizeObserver = new ResizeObserver(() => {
+      if (!document.contains(root)) {
+        resizeObserver.disconnect()
+        return
+      }
+      const widths = getColumnWidths()
+      if (widths === lastColumnWidths) return
+      lastColumnWidths = widths
+      clearTimeout(resplitTimer)
+      resplitTimer = setTimeout(resplit, 150)
+    })
+    columns.forEach((column) => resizeObserver.observe(column))
+  }
+
+  if (document.fonts && document.fonts.status !== 'loaded') {
+    document.fonts.ready.then(resplit)
+  }
 }
