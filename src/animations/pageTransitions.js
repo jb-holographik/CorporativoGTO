@@ -76,7 +76,16 @@ export function initPageTransitions() {
     const hasIntroLoader = mountIntroLoader()
     hydratePage({ reason: 'initial' })
     initBarbaRouter()
-    if (hasIntroLoader) playIntroLoader()
+    if (hasIntroLoader) {
+      const container = document.querySelector('[data-barba="container"]')
+      // Les ScrollTriggers ont été créés avant que la page passe dans le
+      // calque de la révélation : on les recalcule une fois revenue en place
+      playIntroLoader(() =>
+        revealContainerThroughClip(container, { revealNavbar: true }).then(() =>
+          ScrollTrigger.refresh()
+        )
+      )
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -446,240 +455,250 @@ function createFadeTransition() {
     },
     async enter({ next }) {
       if (!next || !next.container) return
-
-      const wrapper = document.querySelector('[data-barba="wrapper"]')
-      if (!wrapper) return
-
-      const { transitionEl, transitionInner, clipRect, clipId, defsSvg } =
-        getOrCreateTransitionElementsFromDOM(wrapper)
-      const { start, mid, end, viewportW, viewportH } = computeClipTargets()
-
-      const nextContainer = next.container
-      const pageWrap =
-        nextContainer.querySelector('.page-wrap') || nextContainer || wrapper
-      const pageContent =
-        pageWrap.querySelector('.page-content') || nextContainer || pageWrap
-
-      // Préparer un clone du hero de la page cible
-      const heroImg = pageContent.querySelector('.section_hero .hero-img_img')
-      const heroRect = heroImg ? heroImg.getBoundingClientRect() : null
-      const rootFontSize =
-        parseFloat(
-          window.getComputedStyle(document.documentElement).fontSize || '16'
-        ) || 16
-      const cloneWpx = 40 * rootFontSize
-      const cloneHpx = 25 * rootFontSize
-      let heroClone = null
-      if (heroImg && heroRect) {
-        heroClone = heroImg.cloneNode(true)
-        const cloneStyle = heroClone.style
-        cloneStyle.position = 'absolute'
-        cloneStyle.top = '50%'
-        cloneStyle.left = '50%'
-        cloneStyle.transformOrigin = '50% 50%'
-        cloneStyle.objectFit = 'cover'
-        cloneStyle.pointerEvents = 'none'
-        cloneStyle.zIndex = '2'
-        cloneStyle.maxWidth = 'none'
-        cloneStyle.maxHeight = 'none'
-        cloneStyle.minWidth = `${cloneWpx}px`
-        cloneStyle.minHeight = `${cloneHpx}px`
-        cloneStyle.setProperty('width', `${cloneWpx}px`, 'important')
-        cloneStyle.setProperty('height', `${cloneHpx}px`, 'important')
-        heroClone.dataset.heroDistanceTop = `${heroRect.top || 0}`
-        heroClone.dataset.heroHeight = `${heroRect.height || 0}`
-        gsap.set(heroClone, { xPercent: -50, yPercent: -50 })
-      }
-
-      const eyebrows = Array.from(
-        pageContent.querySelectorAll('.hero_content .eyebrow-wrap')
-      )
-      if (eyebrows.length) {
-        gsap.set(eyebrows, { yPercent: 400 })
-      }
-
-      // Cacher les titres avant la révélation ; celui du hero glisse avec les
-      // eyebrows, les autres au scroll (initHeadingReveals)
-      prepareHeadingReveals(nextContainer)
-      const heroHeading = pageContent.querySelector('.section_hero h1')
-
-      const placeholder = document.createElement('div')
-      pageContent.parentNode.insertBefore(placeholder, pageContent)
-
-      if (!transitionEl.contains(transitionInner)) {
-        transitionEl.appendChild(transitionInner)
-      }
-      if (defsSvg) {
-        defsSvg.setAttribute('width', `${viewportW}`)
-        defsSvg.setAttribute('height', `${viewportH}`)
-        defsSvg.setAttribute('viewBox', `0 0 ${viewportW} ${viewportH}`)
-      }
-
-      const maskWrapper = document.createElement('div')
-      maskWrapper.className = 'transition_mask-wrapper'
-      Object.assign(maskWrapper.style, {
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        clipPath: `url(#${clipId})`,
-        WebkitClipPath: `url(#${clipId})`,
-      })
-
-      maskWrapper.appendChild(pageContent)
-      if (heroClone) {
-        maskWrapper.appendChild(heroClone)
-      }
-      transitionInner.appendChild(maskWrapper)
-
-      gsap.set(pageContent, {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: `${viewportW}px`,
-        height: `${viewportH}px`,
-        minWidth: `${viewportW}px`,
-        minHeight: `${viewportH}px`,
-        maxWidth: 'none',
-        maxHeight: 'none',
-        flex: '0 0 auto',
-        boxSizing: 'border-box',
-        pointerEvents: 'none',
-        opacity: 0,
-      })
-
-      gsap.set(transitionEl, {
-        display: 'flex',
-        width: `${viewportW}px`,
-        height: `${viewportH}px`,
-        justifyContent: 'center',
-        alignItems: 'center',
-      })
-      gsap.set(clipRect, { attr: start })
-
-      // Navbar masquée : elle apparaît dans le clip avec la page suivante.
-      // Visible : l'indicateur glisse vers le lien de la page en même temps
-      // que le clip s'ouvre.
-      const stopNavClip = revealNavInClip
-        ? revealNavbarThroughClip(clipRect)
-        : null
-      if (!revealNavInClip) {
-        animateNavIndicatorToTarget({ duration: 0.8, ease: listEasing })
-      }
+      const revealNavbar = revealNavInClip
       revealNavInClip = false
-
-      await gsap.to(clipRect, {
-        attr: mid,
-        duration: 0.8,
-        ease: listEasing,
-        onStart: () => gsap.set(pageContent, { opacity: 1 }),
-      })
-
-      // Pas attendu : la transition ne doit pas durer plus longtemps
-      if (heroHeading) revealHeading(heroHeading)
-
-      if (heroClone) {
-        const heroRectNow = heroImg?.getBoundingClientRect()
-        const centerX = heroRectNow
-          ? heroRectNow.left + heroRectNow.width / 2
-          : viewportW / 2
-        const centerY = heroRectNow
-          ? heroRectNow.top + heroRectNow.height / 2
-          : viewportH / 2
-        const targetX = centerX - viewportW / 2
-        const targetY = centerY - viewportH / 2
-        const targetW = heroRectNow ? `${heroRectNow.width}px` : '100vw'
-        const targetH = heroRectNow ? `${heroRectNow.height}px` : '100vh'
-
-        await Promise.all(
-          [
-            gsap.to(clipRect, {
-              attr: end,
-              duration: 0.8,
-              ease: listEasing,
-            }),
-            gsap.to(heroClone, {
-              width: targetW,
-              height: targetH,
-              xPercent: -50,
-              yPercent: -50,
-              x: targetX,
-              y: targetY,
-              duration: 0.8,
-              ease: listEasing,
-            }),
-            eyebrows.length
-              ? gsap.to(eyebrows, {
-                  yPercent: 0,
-                  duration: 0.8,
-                  ease: listEasing,
-                })
-              : null,
-          ].filter(Boolean)
-        )
-      } else {
-        await Promise.all(
-          [
-            gsap.to(clipRect, {
-              attr: end,
-              duration: 0.8,
-              ease: listEasing,
-            }),
-            eyebrows.length
-              ? gsap.to(eyebrows, {
-                  yPercent: 0,
-                  duration: 0.8,
-                  ease: listEasing,
-                })
-              : null,
-          ].filter(Boolean)
-        )
-      }
-
-      if (stopNavClip) stopNavClip()
-
-      document
-        .querySelectorAll('[data-barba="container"]')
-        .forEach((container) => {
-          if (container !== nextContainer) container.remove()
-        })
-
-      placeholder.replaceWith(pageContent)
-      if (hasBrowserEnv) {
-        const lenis = getLenis()
-        if (lenis && typeof lenis.scrollTo === 'function') {
-          lenis.scrollTo(0, { duration: 0, immediate: true })
-        } else {
-          window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-        }
-      }
-      gsap.set(pageContent, {
-        position: '',
-        top: '',
-        left: '',
-        width: '',
-        height: '',
-        opacity: '',
-        pointerEvents: '',
-        minWidth: '',
-        minHeight: '',
-        maxWidth: '',
-        maxHeight: '',
-        flex: '',
-        boxSizing: '',
-      })
-
-      gsap.set(clipRect, { attr: start })
-      gsap.set(transitionEl, { display: 'none', width: '', height: '' })
-      if (maskWrapper && maskWrapper.parentNode) {
-        maskWrapper.parentNode.removeChild(maskWrapper)
-      }
-      if (heroClone && heroClone.parentNode) {
-        heroClone.parentNode.removeChild(heroClone)
-      }
+      await revealContainerThroughClip(next.container, { revealNavbar })
     },
+  }
+}
+
+/**
+ * Révèle un container dans le rectangle SVG qui s'ouvre depuis le centre
+ * (petit cadre puis plein écran), avec le clone de l'image du hero qui prend
+ * sa place et les textes du hero qui glissent. Utilisé par la transition de
+ * page et par le loader d'accueil.
+ * revealNavbar : la navbar est masquée et apparaît dans le clip ; sinon
+ * l'indicateur glisse vers le lien de la page pendant l'ouverture.
+ */
+export async function revealContainerThroughClip(
+  nextContainer,
+  { revealNavbar = false } = {}
+) {
+  const wrapper = document.querySelector('[data-barba="wrapper"]')
+  if (!wrapper || !nextContainer) return
+
+  const { transitionEl, transitionInner, clipRect, clipId, defsSvg } =
+    getOrCreateTransitionElementsFromDOM(wrapper)
+  const { start, mid, end, viewportW, viewportH } = computeClipTargets()
+
+  const pageWrap =
+    nextContainer.querySelector('.page-wrap') || nextContainer || wrapper
+  const pageContent =
+    pageWrap.querySelector('.page-content') || nextContainer || pageWrap
+
+  // Préparer un clone du hero de la page cible
+  const heroImg = pageContent.querySelector('.section_hero .hero-img_img')
+  const heroRect = heroImg ? heroImg.getBoundingClientRect() : null
+  const rootFontSize =
+    parseFloat(
+      window.getComputedStyle(document.documentElement).fontSize || '16'
+    ) || 16
+  const cloneWpx = 40 * rootFontSize
+  const cloneHpx = 25 * rootFontSize
+  let heroClone = null
+  if (heroImg && heroRect) {
+    heroClone = heroImg.cloneNode(true)
+    const cloneStyle = heroClone.style
+    cloneStyle.position = 'absolute'
+    cloneStyle.top = '50%'
+    cloneStyle.left = '50%'
+    cloneStyle.transformOrigin = '50% 50%'
+    cloneStyle.objectFit = 'cover'
+    cloneStyle.pointerEvents = 'none'
+    cloneStyle.zIndex = '2'
+    cloneStyle.maxWidth = 'none'
+    cloneStyle.maxHeight = 'none'
+    cloneStyle.minWidth = `${cloneWpx}px`
+    cloneStyle.minHeight = `${cloneHpx}px`
+    cloneStyle.setProperty('width', `${cloneWpx}px`, 'important')
+    cloneStyle.setProperty('height', `${cloneHpx}px`, 'important')
+    heroClone.dataset.heroDistanceTop = `${heroRect.top || 0}`
+    heroClone.dataset.heroHeight = `${heroRect.height || 0}`
+    gsap.set(heroClone, { xPercent: -50, yPercent: -50 })
+  }
+
+  const eyebrows = Array.from(
+    pageContent.querySelectorAll('.hero_content .eyebrow-wrap')
+  )
+  if (eyebrows.length) {
+    gsap.set(eyebrows, { yPercent: 400 })
+  }
+
+  // Cacher les titres avant la révélation ; celui du hero glisse avec les
+  // eyebrows, les autres au scroll (initHeadingReveals)
+  prepareHeadingReveals(nextContainer)
+  const heroHeading = pageContent.querySelector('.section_hero h1')
+
+  const placeholder = document.createElement('div')
+  pageContent.parentNode.insertBefore(placeholder, pageContent)
+
+  if (!transitionEl.contains(transitionInner)) {
+    transitionEl.appendChild(transitionInner)
+  }
+  if (defsSvg) {
+    defsSvg.setAttribute('width', `${viewportW}`)
+    defsSvg.setAttribute('height', `${viewportH}`)
+    defsSvg.setAttribute('viewBox', `0 0 ${viewportW} ${viewportH}`)
+  }
+
+  const maskWrapper = document.createElement('div')
+  maskWrapper.className = 'transition_mask-wrapper'
+  Object.assign(maskWrapper.style, {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    pointerEvents: 'none',
+    clipPath: `url(#${clipId})`,
+    WebkitClipPath: `url(#${clipId})`,
+  })
+
+  maskWrapper.appendChild(pageContent)
+  if (heroClone) {
+    maskWrapper.appendChild(heroClone)
+  }
+  transitionInner.appendChild(maskWrapper)
+
+  gsap.set(pageContent, {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: `${viewportW}px`,
+    height: `${viewportH}px`,
+    minWidth: `${viewportW}px`,
+    minHeight: `${viewportH}px`,
+    maxWidth: 'none',
+    maxHeight: 'none',
+    flex: '0 0 auto',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    opacity: 0,
+  })
+
+  gsap.set(transitionEl, {
+    display: 'flex',
+    width: `${viewportW}px`,
+    height: `${viewportH}px`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  })
+  gsap.set(clipRect, { attr: start })
+
+  // Navbar masquée : elle apparaît dans le clip avec la page suivante.
+  // Visible : l'indicateur glisse vers le lien de la page en même temps
+  // que le clip s'ouvre.
+  const stopNavClip = revealNavbar ? revealNavbarThroughClip(clipRect) : null
+  if (!revealNavbar) {
+    animateNavIndicatorToTarget({ duration: 0.8, ease: listEasing })
+  }
+
+  await gsap.to(clipRect, {
+    attr: mid,
+    duration: 0.8,
+    ease: listEasing,
+    onStart: () => gsap.set(pageContent, { opacity: 1 }),
+  })
+
+  // Pas attendu : la transition ne doit pas durer plus longtemps
+  if (heroHeading) revealHeading(heroHeading)
+
+  if (heroClone) {
+    const heroRectNow = heroImg?.getBoundingClientRect()
+    const centerX = heroRectNow
+      ? heroRectNow.left + heroRectNow.width / 2
+      : viewportW / 2
+    const centerY = heroRectNow
+      ? heroRectNow.top + heroRectNow.height / 2
+      : viewportH / 2
+    const targetX = centerX - viewportW / 2
+    const targetY = centerY - viewportH / 2
+    const targetW = heroRectNow ? `${heroRectNow.width}px` : '100vw'
+    const targetH = heroRectNow ? `${heroRectNow.height}px` : '100vh'
+
+    await Promise.all(
+      [
+        gsap.to(clipRect, {
+          attr: end,
+          duration: 0.8,
+          ease: listEasing,
+        }),
+        gsap.to(heroClone, {
+          width: targetW,
+          height: targetH,
+          xPercent: -50,
+          yPercent: -50,
+          x: targetX,
+          y: targetY,
+          duration: 0.8,
+          ease: listEasing,
+        }),
+        eyebrows.length
+          ? gsap.to(eyebrows, {
+              yPercent: 0,
+              duration: 0.8,
+              ease: listEasing,
+            })
+          : null,
+      ].filter(Boolean)
+    )
+  } else {
+    await Promise.all(
+      [
+        gsap.to(clipRect, {
+          attr: end,
+          duration: 0.8,
+          ease: listEasing,
+        }),
+        eyebrows.length
+          ? gsap.to(eyebrows, {
+              yPercent: 0,
+              duration: 0.8,
+              ease: listEasing,
+            })
+          : null,
+      ].filter(Boolean)
+    )
+  }
+
+  if (stopNavClip) stopNavClip()
+
+  document.querySelectorAll('[data-barba="container"]').forEach((container) => {
+    if (container !== nextContainer) container.remove()
+  })
+
+  placeholder.replaceWith(pageContent)
+  if (hasBrowserEnv) {
+    const lenis = getLenis()
+    if (lenis && typeof lenis.scrollTo === 'function') {
+      lenis.scrollTo(0, { duration: 0, immediate: true })
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    }
+  }
+  gsap.set(pageContent, {
+    position: '',
+    top: '',
+    left: '',
+    width: '',
+    height: '',
+    opacity: '',
+    pointerEvents: '',
+    minWidth: '',
+    minHeight: '',
+    maxWidth: '',
+    maxHeight: '',
+    flex: '',
+    boxSizing: '',
+  })
+
+  gsap.set(clipRect, { attr: start })
+  gsap.set(transitionEl, { display: 'none', width: '', height: '' })
+  if (maskWrapper && maskWrapper.parentNode) {
+    maskWrapper.parentNode.removeChild(maskWrapper)
+  }
+  if (heroClone && heroClone.parentNode) {
+    heroClone.parentNode.removeChild(heroClone)
   }
 }
 

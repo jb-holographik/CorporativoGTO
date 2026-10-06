@@ -1,28 +1,18 @@
-import { gsap } from 'gsap'
-
-import { listEasing } from '../utils/animationUtils.js'
-import { revealHeading } from './headingReveal.js'
 import { getLenis } from './lenis.js'
 
 const LOADER_BG = '#151515'
 const LOGO_COLOR = '#ffffff'
 const MIN_DISPLAY_MS = 600
 const MAX_WAIT_MS = 2500
-const REVEAL_DURATION = 1.4
-// Décalage de départ de l'image du hero (vers le haut), en part du viewport
-const HERO_IMAGE_OFFSET = 0.3
-// Eyebrows du hero : même départ que dans la transition de page
-const EYEBROW_HIDDEN_Y_PERCENT = 400
-// Les textes démarrent avant d'être découverts : quand le bord du masque est
-// encore à cette distance (part du viewport) sous eux
-const TEXT_TRIGGER_LEAD = 0.4
+// Sous le calque de la transition de page (.transition, z-index 900) : la
+// page s'ouvre dans son clip par-dessus le fond sombre et le logo
+const LOADER_Z_INDEX = '850'
 // Classe optionnelle posée par un snippet dans le <head> Webflow pour masquer
 // la page avant le chargement de ce script (évite un flash du contenu)
 const PENDING_CLASS = 'gto-loading'
 
 let loaderEl = null
 let resolveRevealed = null
-let heroImageOffset = 0
 // Résolue quand le loader a fini de révéler la page (ou tout de suite s'il n'y
 // a pas de loader) : les révélations au scroll attendent ce moment
 let revealedPromise = Promise.resolve()
@@ -42,12 +32,6 @@ function isHomePage() {
 
 function getHeroImage() {
   return document.querySelector('.section_hero .hero-img_img')
-}
-
-function getHeroEyebrows() {
-  return Array.from(
-    document.querySelectorAll('.section_hero .hero_content .eyebrow-wrap')
-  )
 }
 
 function createLogo() {
@@ -94,36 +78,21 @@ export function mountIntroLoader() {
   Object.assign(loaderEl.style, {
     position: 'fixed',
     inset: '0',
-    zIndex: '10000',
+    zIndex: LOADER_Z_INDEX,
     backgroundColor: LOADER_BG,
-    clipPath: 'inset(0 0 0% 0)',
     pointerEvents: 'auto',
   })
 
   const logo = createLogo()
   if (logo) loaderEl.appendChild(logo)
   document.body.appendChild(loaderEl)
+
+  // La navbar (au-dessus du loader) est masquée par un clip vide : elle
+  // apparaîtra dans le clip de la révélation, comme pendant une transition
+  const navbar = document.querySelector('.navbar')
+  if (navbar) navbar.style.clipPath = 'inset(50%)'
+
   clearPending()
-
-  // État de départ du hero, caché sous le loader
-  const eyebrows = getHeroEyebrows()
-  if (eyebrows.length)
-    gsap.set(eyebrows, { yPercent: EYEBROW_HIDDEN_Y_PERCENT })
-
-  const heroImage = getHeroImage()
-  const heroWrapper = heroImage?.parentElement
-  if (heroImage && heroWrapper) {
-    // L'image remonte dans son cadre (qui la découpe) : on limite le
-    // décalage à la partie du cadre sous la ligne de flottaison pour que le
-    // vide laissé en bas ne soit jamais visible
-    const roomBelowFold =
-      heroWrapper.getBoundingClientRect().bottom - window.innerHeight
-    heroImageOffset = Math.max(
-      0,
-      Math.min(window.innerHeight * HERO_IMAGE_OFFSET, roomBelowFold - 1)
-    )
-    gsap.set(heroImage, { y: -heroImageOffset })
-  }
 
   revealedPromise = new Promise((resolve) => {
     resolveRevealed = resolve
@@ -141,34 +110,10 @@ function waitForHeroImage() {
 }
 
 /**
- * Éléments du hero à faire glisser au moment où le bord du masque, qui
- * remonte, les découvre.
+ * Sortie du loader : même animation que la transition de page (reveal),
+ * jouée par-dessus le fond sombre et le logo.
  */
-function getEdgeTargets() {
-  const targets = getHeroEyebrows().map((eyebrow) => ({
-    bottom: eyebrow.getBoundingClientRect().bottom,
-    reveal: () =>
-      gsap.to(eyebrow, { yPercent: 0, duration: 0.8, ease: listEasing }),
-  }))
-
-  const heading = document.querySelector('.section_hero h1')
-  if (heading) {
-    targets.push({
-      bottom: heading.getBoundingClientRect().bottom,
-      // Lignes du bas d'abord, pour suivre le masque qui remonte
-      reveal: () =>
-        revealHeading(heading, { stagger: { each: 0.05, from: 'end' } }),
-    })
-  }
-  return targets
-}
-
-/**
- * Sortie du loader : le fond remonte (clip-path) en masquant progressivement
- * le logo qui reste fixe, l'image du hero descend jusqu'à sa position et les
- * textes glissent à mesure qu'ils sont découverts.
- */
-export async function playIntroLoader() {
+export async function playIntroLoader(reveal) {
   if (!loaderEl) return
 
   const lenis = getLenis()
@@ -182,41 +127,14 @@ export async function playIntroLoader() {
     ]),
   ])
 
-  if (lenis && typeof lenis.start === 'function') lenis.start()
-
-  const targets = getEdgeTargets()
-  const mask = { progress: 0 }
-
-  const heroImage = getHeroImage()
-  if (heroImage && heroImageOffset) {
-    gsap.to(heroImage, {
-      y: 0,
-      duration: REVEAL_DURATION,
-      ease: listEasing,
-    })
+  try {
+    if (typeof reveal === 'function') await reveal()
+  } finally {
+    const navbar = document.querySelector('.navbar')
+    if (navbar) navbar.style.removeProperty('clip-path')
+    loaderEl.remove()
+    loaderEl = null
+    if (lenis && typeof lenis.start === 'function') lenis.start()
+    if (resolveRevealed) resolveRevealed()
   }
-
-  await gsap.to(mask, {
-    progress: 100,
-    duration: REVEAL_DURATION,
-    ease: listEasing,
-    onUpdate: () => {
-      loaderEl.style.clipPath = `inset(0 0 ${mask.progress}% 0)`
-      // Bord bas du masque, en px depuis le haut du viewport
-      const edge = window.innerHeight * (1 - mask.progress / 100)
-      const lead = window.innerHeight * TEXT_TRIGGER_LEAD
-      targets.forEach((target) => {
-        if (target.done || edge > target.bottom + lead) return
-        target.done = true
-        target.reveal()
-      })
-    },
-  })
-
-  targets.forEach((target) => {
-    if (!target.done) target.reveal()
-  })
-  loaderEl.remove()
-  loaderEl = null
-  if (resolveRevealed) resolveRevealed()
 }
