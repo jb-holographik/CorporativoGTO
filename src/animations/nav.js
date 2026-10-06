@@ -68,6 +68,9 @@ export function initNavIndicator() {
     const link = item.querySelector('.navlink')
     if (link) {
       link.addEventListener('click', () => {
+        // Lien vers la page active : pas de transition pour déverrouiller
+        const linkPath = normalizeHrefPath(link.getAttribute('href'))
+        if (linkPath === normalizeHrefPath(window.location.pathname)) return
         lockIndicatorOnItem(item)
       })
     }

@@ -197,10 +197,18 @@ function attachNavigationClickGuard() {
   document.addEventListener(
     'click',
     (event) => {
-      if (!event.target?.closest?.('a[href]')) return
+      const link = event.target?.closest?.('a[href]')
+      if (!link) return
       if (navigationInFlight) {
         event.preventDefault()
         event.stopImmediatePropagation()
+        return
+      }
+      // Lien vers la page active : ne rien faire (Barba l'ignore et le
+      // navigateur rechargerait la page). Pas de stopPropagation pour que le
+      // menu mobile puisse encore se fermer.
+      if (isLinkToCurrentPage(link, event)) {
+        event.preventDefault()
         return
       }
       hrefBeforeClick = currentPageUrl()
@@ -220,6 +228,27 @@ function attachNavigationClickGuard() {
   barba.hooks.after(() => {
     navigationInFlight = false
   })
+}
+
+function isLinkToCurrentPage(link, event) {
+  if (event.button > 0) return false
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return false
+  }
+  if (link.target === '_blank' || link.hasAttribute('download')) return false
+  let url
+  try {
+    url = new URL(link.href, window.location.href)
+  } catch (error) {
+    return false
+  }
+  if (url.origin !== window.location.origin) return false
+  // Une vraie ancre (#section) doit rester fonctionnelle
+  if (url.hash && url.hash !== '#') return false
+  return (
+    normalizePath(url.pathname) === normalizePath(window.location.pathname) &&
+    url.search === window.location.search
+  )
 }
 
 // URL sans le hash : un lien d'ancre ne déclenche pas de transition Barba
@@ -385,9 +414,12 @@ function createMobileMenuTransition() {
       }
       resetScrollTopImmediate()
     },
-    async after() {
-      await closeNavMenu()
-      setNavScrollLock(false)
+    after() {
+      // Ne pas attendre la fermeture du menu : tant que la transition n'est pas
+      // terminée, Barba ignore les clics. Si le menu est rouvert pendant sa
+      // fermeture, celle-ci ne se termine jamais et plus aucun lien ne
+      // fonctionnait.
+      closeNavMenu().then(() => setNavScrollLock(false))
     },
   }
 }
