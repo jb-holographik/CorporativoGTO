@@ -65,7 +65,7 @@ export function revealHeading(heading, tweenVars = {}) {
   return gsap.to(split.lines, {
     yPercent: 0,
     duration: 1.2,
-    stagger: 0.1,
+    stagger: 0.05,
     ease: listEasing,
     ...tweenVars,
     onComplete: () => {

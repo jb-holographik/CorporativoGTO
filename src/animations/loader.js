@@ -154,7 +154,7 @@ function getEdgeTargets() {
       bottom: heading.getBoundingClientRect().bottom,
       // Lignes du bas d'abord, pour suivre le masque qui remonte
       reveal: () =>
-        revealHeading(heading, { stagger: { each: 0.1, from: 'end' } }),
+        revealHeading(heading, { stagger: { each: 0.05, from: 'end' } }),
     })
   }
   return targets
