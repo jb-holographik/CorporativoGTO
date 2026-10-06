@@ -13,6 +13,9 @@ const REVEAL_DURATION = 1.4
 const HERO_IMAGE_OFFSET = 0.3
 // Eyebrows du hero : même départ que dans la transition de page
 const EYEBROW_HIDDEN_Y_PERCENT = 400
+// Les textes démarrent avant d'être découverts : quand le bord du masque est
+// encore à cette distance (part du viewport) sous eux
+const TEXT_TRIGGER_LEAD = 0.4
 // Classe optionnelle posée par un snippet dans le <head> Webflow pour masquer
 // la page avant le chargement de ce script (évite un flash du contenu)
 const PENDING_CLASS = 'gto-loading'
@@ -201,8 +204,9 @@ export async function playIntroLoader() {
       loaderEl.style.clipPath = `inset(0 0 ${mask.progress}% 0)`
       // Bord bas du masque, en px depuis le haut du viewport
       const edge = window.innerHeight * (1 - mask.progress / 100)
+      const lead = window.innerHeight * TEXT_TRIGGER_LEAD
       targets.forEach((target) => {
-        if (target.done || edge > target.bottom) return
+        if (target.done || edge > target.bottom + lead) return
         target.done = true
         target.reveal()
       })
