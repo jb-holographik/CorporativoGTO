@@ -601,7 +601,8 @@ export async function revealContainerThroughClip(
   })
 
   // Pas attendu : la transition ne doit pas durer plus longtemps
-  if (heroHeading) revealHeading(heroHeading)
+  // Fini en même temps que l'ouverture du clip (seconde phase, 0.8s)
+  if (heroHeading) revealHeading(heroHeading, { totalDuration: 0.8 })
 
   if (heroClone) {
     const heroRectNow = heroImg?.getBoundingClientRect()

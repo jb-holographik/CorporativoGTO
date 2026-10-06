@@ -13,6 +13,8 @@ const EXCLUDED_SELECTOR = '.about-heading'
 // boîte de ligne, sans ça le masque couperait le haut/bas des lettres
 const MASK_BLEED = '0.15em'
 const HIDDEN_Y_PERCENT = 150
+const REVEAL_DURATION = 1.2
+const LINE_STAGGER = 0.05
 
 const splits = new WeakMap()
 // Révélations demandées avant que le titre soit découpé (police en cours de
@@ -83,6 +85,8 @@ export function prepareHeadingReveals(scope) {
 /**
  * Fait glisser les lignes d'un titre dans leur masque, puis retire le
  * découpage pour que le titre se recompose normalement au resize.
+ * totalDuration : durée totale imposée, décalage des lignes compris (pour
+ * finir en même temps qu'une autre animation).
  */
 export function revealHeading(heading, tweenVars = {}) {
   if (heading.dataset.headingReveal !== 'pending') return null
@@ -92,12 +96,17 @@ export function revealHeading(heading, tweenVars = {}) {
     return null
   }
   heading.dataset.headingReveal = 'revealed'
+  const { totalDuration, ...vars } = tweenVars
+  const timing = { duration: REVEAL_DURATION, stagger: LINE_STAGGER }
+  if (totalDuration) {
+    const staggerTotal = LINE_STAGGER * (split.lines.length - 1)
+    timing.duration = Math.max(0.1, totalDuration - staggerTotal)
+  }
   return gsap.to(split.lines, {
     yPercent: 0,
-    duration: 1.2,
-    stagger: 0.05,
+    ...timing,
     ease: listEasing,
-    ...tweenVars,
+    ...vars,
     onComplete: () => {
       split.revert()
       splits.delete(heading)

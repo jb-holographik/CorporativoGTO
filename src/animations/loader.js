@@ -1,5 +1,6 @@
 import { gsap } from 'gsap'
 
+import { listEasing } from '../utils/animationUtils.js'
 import { getLenis } from './lenis.js'
 
 const LOADER_BG = '#151515'
@@ -7,10 +8,10 @@ const LOADER_BG = '#151515'
 // bloc de gauche à droite
 const LOGO_START_COLOR = LOADER_BG
 const LOGO_COLOR = '#ffffff'
-const LOGO_BLOCK_DURATION = 0.3
+const LOGO_BLOCK_DURATION = 0.25
 // Durée totale du décalage, identique pour les barres et les lettres pour
 // qu'elles démarrent et finissent ensemble
-const LOGO_STAGGER_AMOUNT = 0.35
+const LOGO_STAGGER_AMOUNT = 0.25
 // Petit temps de pause une fois le logo blanc, avant la révélation
 const LOGO_HOLD_MS = 150
 // Écart (unités SVG) en dessous duquel deux morceaux sont considérés bord à bord
@@ -200,7 +201,8 @@ function animateLogo(logo) {
   const vars = {
     fill: LOGO_COLOR,
     duration: LOGO_BLOCK_DURATION,
-    ease: 'power2.out',
+    // cubic-bezier(0.6, 0, 0, 1)
+    ease: listEasing,
     stagger: { amount: LOGO_STAGGER_AMOUNT },
   }
   if (bars.length) tl.to(bars, vars, 0)
