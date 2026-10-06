@@ -503,7 +503,10 @@ html.lenis body {
     margin-right: auto;
     flex: none;
     aspect-ratio: 600 / 973;
-    align-self: center;
+    /* !important : une règle Webflow sur l'id (#w-node-…) force
+       align-self: stretch, ce qui étire le bloc sur toute la rangée et
+       casse le ratio 600/973 */
+    align-self: center !important;
     justify-self: center;
     overflow: hidden;
   }
@@ -534,7 +537,8 @@ html.lenis body {
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    /* Même rendu que desktop/tablette : l'image remplit le cadre */
+    object-fit: cover;
     object-position: center;
   }
 
