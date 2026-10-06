@@ -19,6 +19,7 @@ import {
 import { initHero } from './hero.js'
 import { initHomeAbout } from './homeAbout.js'
 import { initLenis, getLenis } from './lenis.js'
+import { mountIntroLoader, playIntroLoader } from './loader.js'
 import {
   animateNavIndicatorToTarget,
   closeNavMenu,
@@ -71,8 +72,11 @@ export function initPageTransitions() {
     hasBootstrapped = true
     ensureManualScrollRestoration()
     attachLoadListener()
+    // Loader monté avant l'hydratation : les animations d'entrée l'attendent
+    const hasIntroLoader = mountIntroLoader()
     hydratePage({ reason: 'initial' })
     initBarbaRouter()
+    if (hasIntroLoader) playIntroLoader()
   }
 
   if (document.readyState === 'loading') {

@@ -2,6 +2,7 @@ import { gsap } from 'gsap'
 import { SplitText } from 'gsap/SplitText'
 
 import { listEasing } from '../utils/animationUtils.js'
+import { whenIntroRevealed } from './loader.js'
 
 gsap.registerPlugin(SplitText)
 
@@ -80,18 +81,25 @@ export function initHeadingReveals() {
   // l'écran via d'autres animations (cartes empilées, sections épinglées), il
   // faut se baser sur leur visibilité réelle et non sur leur position au scroll
   if (observer) observer.disconnect()
-  observer = new IntersectionObserver(
+  const pageObserver = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return
-        observer.unobserve(entry.target)
+        pageObserver.unobserve(entry.target)
         revealHeading(entry.target)
       })
     },
     { rootMargin: '0px 0px -10% 0px' }
   )
-  getHeadings().forEach((heading) => {
-    if (heading.dataset.headingReveal === 'pending') observer.observe(heading)
+  observer = pageObserver
+  // Pas de révélation cachée derrière le loader d'accueil
+  whenIntroRevealed().then(() => {
+    if (observer !== pageObserver) return
+    getHeadings().forEach((heading) => {
+      if (heading.dataset.headingReveal === 'pending') {
+        pageObserver.observe(heading)
+      }
+    })
   })
 
   // Si la police n'était pas encore chargée, les lignes ont été calculées avec
