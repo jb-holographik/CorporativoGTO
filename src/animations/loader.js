@@ -1,19 +1,27 @@
 import { gsap } from 'gsap'
 
 import { listEasing } from '../utils/animationUtils.js'
+import { revealHeading } from './headingReveal.js'
 import { getLenis } from './lenis.js'
 
 const LOADER_BG = '#151515'
+const LOGO_COLOR = '#ffffff'
 const MIN_DISPLAY_MS = 600
 const MAX_WAIT_MS = 2500
+const REVEAL_DURATION = 1.4
+// Décalage de départ de l'image du hero (vers le haut), en part du viewport
+const HERO_IMAGE_OFFSET = 0.3
+// Eyebrows du hero : même départ que dans la transition de page
+const EYEBROW_HIDDEN_Y_PERCENT = 400
 // Classe optionnelle posée par un snippet dans le <head> Webflow pour masquer
 // la page avant le chargement de ce script (évite un flash du contenu)
 const PENDING_CLASS = 'gto-loading'
 
 let loaderEl = null
 let resolveRevealed = null
-// Résolue quand le loader commence à révéler la page (ou tout de suite s'il
-// n'y a pas de loader) : les animations d'entrée attendent ce moment
+let heroImageOffset = 0
+// Résolue quand le loader a fini de révéler la page (ou tout de suite s'il n'y
+// a pas de loader) : les révélations au scroll attendent ce moment
 let revealedPromise = Promise.resolve()
 
 export function whenIntroRevealed() {
@@ -29,6 +37,16 @@ function isHomePage() {
   return container?.dataset.barbaNamespace === 'home'
 }
 
+function getHeroImage() {
+  return document.querySelector('.section_hero .hero-img_img')
+}
+
+function getHeroEyebrows() {
+  return Array.from(
+    document.querySelectorAll('.section_hero .hero_content .eyebrow-wrap')
+  )
+}
+
 function createLogo() {
   const navLogo = document.querySelector('.navbar .nav-logo svg')
   if (!navLogo) return null
@@ -40,7 +58,7 @@ function createLogo() {
   logo.setAttribute('aria-hidden', 'true')
   logo.querySelectorAll('[fill]').forEach((node) => {
     if (node.getAttribute('fill') !== 'none') {
-      node.setAttribute('fill', LOADER_BG)
+      node.setAttribute('fill', LOGO_COLOR)
     }
   })
   // Même taille et même position horizontale que le logo de la navbar,
@@ -52,7 +70,6 @@ function createLogo() {
     width: `${rect.width}px`,
     height: `${rect.height}px`,
     transform: 'translateY(-50%)',
-    mixBlendMode: 'difference',
   })
   return logo
 }
@@ -76,7 +93,7 @@ export function mountIntroLoader() {
     inset: '0',
     zIndex: '10000',
     backgroundColor: LOADER_BG,
-    clipPath: 'inset(0 0 0 0%)',
+    clipPath: 'inset(0 0 0% 0)',
     pointerEvents: 'auto',
   })
 
@@ -85,6 +102,26 @@ export function mountIntroLoader() {
   document.body.appendChild(loaderEl)
   clearPending()
 
+  // État de départ du hero, caché sous le loader
+  const eyebrows = getHeroEyebrows()
+  if (eyebrows.length)
+    gsap.set(eyebrows, { yPercent: EYEBROW_HIDDEN_Y_PERCENT })
+
+  const heroImage = getHeroImage()
+  const heroWrapper = heroImage?.parentElement
+  if (heroImage && heroWrapper) {
+    // L'image remonte dans son cadre (qui la découpe) : on limite le
+    // décalage à la partie du cadre sous la ligne de flottaison pour que le
+    // vide laissé en bas ne soit jamais visible
+    const roomBelowFold =
+      heroWrapper.getBoundingClientRect().bottom - window.innerHeight
+    heroImageOffset = Math.max(
+      0,
+      Math.min(window.innerHeight * HERO_IMAGE_OFFSET, roomBelowFold - 1)
+    )
+    gsap.set(heroImage, { y: -heroImageOffset })
+  }
+
   revealedPromise = new Promise((resolve) => {
     resolveRevealed = resolve
   })
@@ -92,7 +129,7 @@ export function mountIntroLoader() {
 }
 
 function waitForHeroImage() {
-  const img = document.querySelector('.section_hero .hero-img_img')
+  const img = getHeroImage()
   if (!img || (img.complete && img.naturalWidth > 0)) return Promise.resolve()
   return new Promise((resolve) => {
     img.addEventListener('load', resolve, { once: true })
@@ -101,8 +138,32 @@ function waitForHeroImage() {
 }
 
 /**
- * Lance la sortie du loader : le fond glisse vers la droite (clip-path) et
- * masque progressivement le logo qui reste fixe.
+ * Éléments du hero à faire glisser au moment où le bord du masque, qui
+ * remonte, les découvre.
+ */
+function getEdgeTargets() {
+  const targets = getHeroEyebrows().map((eyebrow) => ({
+    bottom: eyebrow.getBoundingClientRect().bottom,
+    reveal: () =>
+      gsap.to(eyebrow, { yPercent: 0, duration: 0.8, ease: listEasing }),
+  }))
+
+  const heading = document.querySelector('.section_hero h1')
+  if (heading) {
+    targets.push({
+      bottom: heading.getBoundingClientRect().bottom,
+      // Lignes du bas d'abord, pour suivre le masque qui remonte
+      reveal: () =>
+        revealHeading(heading, { stagger: { each: 0.1, from: 'end' } }),
+    })
+  }
+  return targets
+}
+
+/**
+ * Sortie du loader : le fond remonte (clip-path) en masquant progressivement
+ * le logo qui reste fixe, l'image du hero descend jusqu'à sa position et les
+ * textes glissent à mesure qu'ils sont découverts.
  */
 export async function playIntroLoader() {
   if (!loaderEl) return
@@ -118,15 +179,40 @@ export async function playIntroLoader() {
     ]),
   ])
 
-  if (resolveRevealed) resolveRevealed()
   if (lenis && typeof lenis.start === 'function') lenis.start()
 
-  await gsap.to(loaderEl, {
-    clipPath: 'inset(0 0 0 100%)',
-    duration: 1.4,
+  const targets = getEdgeTargets()
+  const mask = { progress: 0 }
+
+  const heroImage = getHeroImage()
+  if (heroImage && heroImageOffset) {
+    gsap.to(heroImage, {
+      y: 0,
+      duration: REVEAL_DURATION,
+      ease: listEasing,
+    })
+  }
+
+  await gsap.to(mask, {
+    progress: 100,
+    duration: REVEAL_DURATION,
     ease: listEasing,
+    onUpdate: () => {
+      loaderEl.style.clipPath = `inset(0 0 ${mask.progress}% 0)`
+      // Bord bas du masque, en px depuis le haut du viewport
+      const edge = window.innerHeight * (1 - mask.progress / 100)
+      targets.forEach((target) => {
+        if (target.done || edge > target.bottom) return
+        target.done = true
+        target.reveal()
+      })
+    },
   })
 
+  targets.forEach((target) => {
+    if (!target.done) target.reveal()
+  })
   loaderEl.remove()
   loaderEl = null
+  if (resolveRevealed) resolveRevealed()
 }

@@ -58,7 +58,7 @@ export function prepareHeadingReveals(scope) {
  * Fait glisser les lignes d'un titre dans leur masque, puis retire le
  * découpage pour que le titre se recompose normalement au resize.
  */
-export function revealHeading(heading) {
+export function revealHeading(heading, tweenVars = {}) {
   const split = splits.get(heading)
   if (!split || heading.dataset.headingReveal !== 'pending') return null
   heading.dataset.headingReveal = 'revealed'
@@ -67,6 +67,7 @@ export function revealHeading(heading) {
     duration: 1.2,
     stagger: 0.1,
     ease: listEasing,
+    ...tweenVars,
     onComplete: () => {
       split.revert()
       splits.delete(heading)
