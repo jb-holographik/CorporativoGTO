@@ -146,7 +146,7 @@ function lockIndicatorOnItem(item) {
   moveIndicatorToItem(item, false)
 }
 
-function moveIndicatorToItem(targetItem, animate = true) {
+function moveIndicatorToItem(targetItem, animate = true, tweenVars = {}) {
   if (!targetItem || !navListRef || !navIndicatorRef) return
   const listRect = navListRef.getBoundingClientRect()
   const itemRect = targetItem.getBoundingClientRect()
@@ -156,9 +156,85 @@ function moveIndicatorToItem(targetItem, animate = true) {
       y: translateYPx,
       duration: 0.3,
       ease: customEase,
+      overwrite: 'auto',
+      ...tweenVars,
     })
   } else {
     gsap.set(navIndicatorRef, { y: translateYPx })
+  }
+}
+
+function findItemForPath(path) {
+  if (isTabletAndBelow()) return getDefaultItem()
+  return (
+    navItemsRef.find((item) => {
+      const link = item.querySelector('a.navlink')
+      return link && normalizeHrefPath(link.getAttribute('href')) === path
+    }) || null
+  )
+}
+
+/**
+ * Début d'une transition Barba (hors menu mobile) : verrouille l'indicateur
+ * sur le lien de la page suivante, quel que soit le lien cliqué (navbar ou
+ * footer). Il est ensuite déplacé au démarrage du clip :
+ * - navbar visible : il glisse en même temps (animateNavIndicatorToTarget)
+ * - navbar masquée : il est placé directement et la navbar est révélée dans
+ *   le clip de la page suivante (revealNavbarThroughClip)
+ * Retourne true si la navbar est masquée.
+ */
+export function prepareNavForTransition(nextHref) {
+  const wasHidden = navHidden
+  if (!navElementRef || !navListRef || !navIndicatorRef) return wasHidden
+
+  const target = findItemForPath(normalizeHrefPath(nextHref))
+  if (!target) return wasHidden
+
+  lockedItemRef = target
+  currentItemRef = target
+  navElementRef.setAttribute('data-nav-indicator-locked', 'true')
+  return wasHidden
+}
+
+export function animateNavIndicatorToTarget(tweenVars) {
+  if (lockedItemRef) moveIndicatorToItem(lockedItemRef, true, tweenVars)
+}
+
+/**
+ * Affiche la navbar découpée par le rectangle SVG de la transition, pour
+ * qu'elle apparaisse avec la page suivante au lieu de surgir après.
+ * Retourne une fonction qui arrête le suivi et retire le découpage.
+ */
+export function revealNavbarThroughClip(clipRect) {
+  const navbar = document.querySelector('.navbar')
+  if (!navbar || !clipRect) return () => {}
+
+  navHidden = false
+  gsap.killTweensOf(navbar)
+  navbar.classList.remove('is-scroll-hidden')
+
+  // Le rectangle est en coordonnées viewport (clip userSpaceOnUse sur un
+  // calque fixe plein écran), comme la navbar fixe
+  const syncClip = () => {
+    const rect = navbar.getBoundingClientRect()
+    const x = parseFloat(clipRect.getAttribute('x')) || 0
+    const y = parseFloat(clipRect.getAttribute('y')) || 0
+    const width = parseFloat(clipRect.getAttribute('width')) || 0
+    const height = parseFloat(clipRect.getAttribute('height')) || 0
+    navbar.style.clipPath = `inset(${y - rect.top}px ${
+      rect.right - (x + width)
+    }px ${rect.bottom - (y + height)}px ${x - rect.left}px)`
+  }
+
+  gsap.set(navbar, { display: 'flex', visibility: 'visible', opacity: 1 })
+  // Positions lisibles seulement maintenant que la navbar est affichée
+  if (lockedItemRef) moveIndicatorToItem(lockedItemRef, false)
+  syncClip()
+  gsap.ticker.add(syncClip)
+
+  return () => {
+    gsap.ticker.remove(syncClip)
+    navbar.style.removeProperty('clip-path')
   }
 }
 

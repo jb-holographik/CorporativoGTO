@@ -20,10 +20,13 @@ import { initHero } from './hero.js'
 import { initHomeAbout } from './homeAbout.js'
 import { initLenis, getLenis } from './lenis.js'
 import {
+  animateNavIndicatorToTarget,
   closeNavMenu,
   initNavIndicator,
   initNavMenuToggle,
   initNavScrollHide,
+  prepareNavForTransition,
+  revealNavbarThroughClip,
   setNavIndicatorTransitionState,
   setNavScrollLock,
   shouldUseMobileMenuTransition,
@@ -58,6 +61,8 @@ let hasBootstrapped = false
 let listenersAttached = false
 let transitionsReady = false
 let skipNextAfterEnterHydration = false
+// Navbar masquée au clic : à révéler dans le clip de la page suivante
+let revealNavInClip = false
 
 export function initPageTransitions() {
   if (!hasBrowserEnv || hasBootstrapped) return
@@ -231,10 +236,12 @@ function hasBarbaMarkup() {
 
 function registerBarbaHooks() {
   barba.hooks.beforeLeave((data) => {
-    setNavScrollLock(true)
+    revealNavInClip = false
     if (!shouldUseMobileMenuTransition(data?.trigger)) {
       setNavIndicatorTransitionState(true)
+      revealNavInClip = prepareNavForTransition(data?.next?.url?.href)
     }
+    setNavScrollLock(true)
     pauseSmoothScroll()
     disableScrollTriggersKeepState()
   })
@@ -516,6 +523,17 @@ function createFadeTransition() {
       })
       gsap.set(clipRect, { attr: start })
 
+      // Navbar masquée : elle apparaît dans le clip avec la page suivante.
+      // Visible : l'indicateur glisse vers le lien de la page en même temps
+      // que le clip s'ouvre.
+      const stopNavClip = revealNavInClip
+        ? revealNavbarThroughClip(clipRect)
+        : null
+      if (!revealNavInClip) {
+        animateNavIndicatorToTarget({ duration: 0.8, ease: listEasing })
+      }
+      revealNavInClip = false
+
       await gsap.to(clipRect, {
         attr: mid,
         duration: 0.8,
@@ -583,6 +601,8 @@ function createFadeTransition() {
           ].filter(Boolean)
         )
       }
+
+      if (stopNavClip) stopNavClip()
 
       document
         .querySelectorAll('[data-barba="container"]')
