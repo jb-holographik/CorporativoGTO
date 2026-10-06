@@ -7,12 +7,12 @@ const LOADER_BG = '#151515'
 // bloc de gauche à droite
 const LOGO_START_COLOR = LOADER_BG
 const LOGO_COLOR = '#ffffff'
-const LOGO_BLOCK_DURATION = 0.5
+const LOGO_BLOCK_DURATION = 0.3
 // Durée totale du décalage, identique pour les barres et les lettres pour
 // qu'elles démarrent et finissent ensemble
-const LOGO_STAGGER_AMOUNT = 0.6
+const LOGO_STAGGER_AMOUNT = 0.35
 // Petit temps de pause une fois le logo blanc, avant la révélation
-const LOGO_HOLD_MS = 250
+const LOGO_HOLD_MS = 150
 // Écart (unités SVG) en dessous duquel deux morceaux sont considérés bord à bord
 const TOUCH_TOLERANCE = 0.1
 const MIN_DISPLAY_MS = 600
