@@ -15,7 +15,14 @@ const MASK_BLEED = '0.15em'
 const HIDDEN_Y_PERCENT = 150
 
 const splits = new WeakMap()
+// Révélations demandées avant que le titre soit découpé (police en cours de
+// chargement) : jouées dès que le découpage est fait
+const deferredReveals = new WeakMap()
 let observer = null
+
+function areFontsLoaded() {
+  return !document.fonts || document.fonts.status === 'loaded'
+}
 
 function getHeadings(scope) {
   const root =
@@ -50,7 +57,26 @@ export function prepareHeadingReveals(scope) {
   getHeadings(scope).forEach((heading) => {
     if (heading.dataset.headingReveal) return
     heading.dataset.headingReveal = 'pending'
-    splitHeading(heading)
+
+    if (areFontsLoaded()) {
+      splitHeading(heading)
+      return
+    }
+
+    // Découper avec la police de secours donnerait de mauvaises coupures de
+    // ligne : le titre reste caché jusqu'au chargement de la police
+    gsap.set(heading, { visibility: 'hidden' })
+    document.fonts.ready.then(() => {
+      if (heading.dataset.headingReveal === 'pending' && !splits.has(heading)) {
+        splitHeading(heading)
+      }
+      gsap.set(heading, { clearProps: 'visibility' })
+      if (deferredReveals.has(heading)) {
+        const tweenVars = deferredReveals.get(heading)
+        deferredReveals.delete(heading)
+        revealHeading(heading, tweenVars)
+      }
+    })
   })
 }
 
@@ -59,8 +85,12 @@ export function prepareHeadingReveals(scope) {
  * découpage pour que le titre se recompose normalement au resize.
  */
 export function revealHeading(heading, tweenVars = {}) {
+  if (heading.dataset.headingReveal !== 'pending') return null
   const split = splits.get(heading)
-  if (!split || heading.dataset.headingReveal !== 'pending') return null
+  if (!split) {
+    deferredReveals.set(heading, tweenVars)
+    return null
+  }
   heading.dataset.headingReveal = 'revealed'
   return gsap.to(split.lines, {
     yPercent: 0,
@@ -102,17 +132,4 @@ export function initHeadingReveals() {
       }
     })
   })
-
-  // Si la police n'était pas encore chargée, les lignes ont été calculées avec
-  // la police de secours : on redécoupe les titres pas encore révélés
-  if (document.fonts && document.fonts.status !== 'loaded') {
-    document.fonts.ready.then(() => {
-      getHeadings().forEach((heading) => {
-        const split = splits.get(heading)
-        if (!split || heading.dataset.headingReveal !== 'pending') return
-        split.revert()
-        splitHeading(heading)
-      })
-    })
-  }
 }
